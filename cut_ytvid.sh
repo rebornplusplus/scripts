@@ -1,28 +1,99 @@
-# Dependencies:
-# 	[youtube-dl](https://youtube-dl.org/)
-#	[ffmpeg](http://ffmpeg.org/)
+#!/bin/bash
 
-if [ "$#" -lt 4 ]; then
-	echo "Usage:"
-	echo "	./SCRIPTNAME YT_URL ST_TIME EN_TIME FILENAME_WITHOUT_EXTENSION"
-	echo "	ST_TIME and EN_TIME in hh:mm:ss format"
+# Dependencies:
+# - [youtube-dl](https://youtube-dl.org/)
+# - [ffmpeg](http://ffmpeg.org/)
+
+usage() {
+cat << EOF
+Usage: `basename $0` [options..] URL
+
+Download and cut youtube videos.
+
+[options]
+    -h
+        Show this help information and exit.
+
+    -s START_TIME
+        Cut videos starting from START_TIME. If absent, cut from the start.
+
+    -e END_TIME
+        Cut videos till END_TIME. If absent, cut till the end.
+
+    -o OUTPUT_PREFIX
+        Specify the output file name, without extension.
+EOF
+}
+
+fetch_filename() {
+	filename=$(youtube-dl --get-filename -o "%(title)s" "$1")
+	echo "$filename"
+}
+
+download_video() {
+	youtube-dl -o "/tmp/%(title)s" "$1"
+}
+
+cut_video() {
+	ffmpeg -i "$1" -ss "$2" -to "$3" "$4"
+}
+
+ST_TIME=""
+EN_TIME=""
+OUTPUT_PREFIX=""
+
+while getopts ":hs:e:o:" opt; do
+	case $opt in
+		h)
+			usage
+			exit 0
+			;;
+		s)
+			ST_TIME="$OPTARG"
+			;;
+		e)
+			EN_TIME="$OPTARG"
+			;;
+		o)
+			OUTPUT_PREFIX="$OPTARG"
+			;;
+		\?)
+			echo "Error: Invalid option: -$OPTARG" >&2
+			exit 1
+			;;
+		:)
+			echo "Error: Option -$OPTARG requires an argument." >&2
+			exit 1
+			;;
+	esac
+done
+
+if [ $(( $# - $OPTIND )) -lt 0 ]; then
+    usage
+    exit 1
 fi
 
-YT_URL=$1
-ST_TIME=$2
-EN_TIME=$3
-FILENAME_WITHOUT_EXTENSION=$4
-TEMPLATE=".ac7e1adbc669c240a74d088875e"
+YT_URL="${@:$OPTIND:1}"
 
-youtube-dl "$YT_URL" -o $TEMPLATE
+download_video "$YT_URL"
 
-DOWNLOADED_FILE=`find $TEMPLATE*`
-EXT=${DOWNLOADED_FILE##*.}
-FULLFILENAME=$FILENAME_WITHOUT_EXTENSION"."$EXT
-echo $DOWNLOADED_FILE $FULLFILENAME $EXT
+file=`find "/tmp/$(fetch_filename "$YT_URL")"*`
+output_file=`basename "$file"`
+if [[ $OUTPUT_PREFIX ]]; then
+	extension="${file##*.}"
+	output_file="${OUTPUT_PREFIX}.${extension}"
+fi
 
-# Slower, but A/V sync
-# ffmpeg -i $DOWNLOADED_FILE -ss $ST_TIME -to $EN_TIME $FULLFILENAME
-# Faster, but A/V might be slightly out of sync
-ffmpeg -i $DOWNLOADED_FILE -ss $ST_TIME -to $EN_TIME -c copy $FULLFILENAME
-rm $DOWNLOADED_FILE
+if [[ $ST_TIME ]] && [[ $EN_TIME ]]; then
+	ffmpeg -i "$file" -ss "$ST_TIME" -to "$EN_TIME" "$output_file"
+elif [[ $ST_TIME ]]; then
+	ffmpeg -i "$file" -ss "$ST_TIME" "$output_file"
+elif [[ $EN_TIME ]]; then
+	ffmpeg -i "$file" -to "$EN_TIME" "$output_file"
+else
+	mv "$file" "$output_file"
+fi
+
+if [ -f "$file" ]; then
+	rm "$file"
+fi
