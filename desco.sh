@@ -1,5 +1,26 @@
 #!/bin/bash
 
+# This script checks the balance of a prepaid DESCO account or meter and
+# sends a notification if the balance is below a threshold (default: 0).
+# Please read the help info to learn more. (use -h)
+#
+# This script can be used as a cron job to run in a schedule.
+# crontab man page: https://man7.org/linux/man-pages/man5/crontab.5.html
+# Please note that as this script is using "notify-send", you may need
+# to set the DBUS_SESSION_BUS_ADDRESS variable in the cron job.
+# Additonally, consider using /bin/bash as SHELL in your crontab file.
+#
+# For example, your crontab entry might look like the following:
+#
+#   0 * * * * DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/<user-id>/bus" /<path>/desco.sh -a <acc> -t <thresh>
+#
+# This cron job should run the script every hour.
+#
+# Dependencies:
+#   - curl
+#   - jq
+#   - notify-send
+
 BASE_URL="http://prepaid.desco.org.bd/api/tkdes/customer/getBalance"
 
 ACCOUNT=""
